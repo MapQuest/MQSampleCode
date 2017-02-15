@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MapQuest Leaflet plugin</title>
+		<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.css" />
+		<script src="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.js"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-map.js?key=KEY"></script>
+		<script src="//dynmeth.github.io/RaphaelLayer/libs/raphael/raphael-min.js"></script>
+		<script src="js/rlayer.js"></script>
+		<script type="text/javascript">
+			"use strict";
+
+			var L, MQ;
+
+			window.onload = function() {
+
+				var map = L.map('map', {
+					layers: MQ.mapLayer(),
+					center: [ 40.731701, -73.993411 ],
+					zoom: 12
+				});
+
+				map.on('click', function(e) {
+					var b = new R.BezierAnim([map.getCenter(), e.latlng], {}, function() {
+						var p = new R.Pulse(
+							e.latlng,
+							6,
+							{'stroke': '#2478ad', 'fill': '#30a3ec'},
+							{'stroke': '#30a3ec', 'stroke-width': 3}
+						);
+
+						map.addLayer(p);
+						setTimeout(function() {
+							map.removeLayer(b).removeLayer(p);
+						}, 3000);
+					});
+
+					map.addLayer(b);
+				});
+			};
+		</script>
+		<style>
+			#map {
+				width: 800px;
+				height: 600px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="map"></div>
+		Click on the map to see the animation.
+	</body>
+</html>

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MapQuest Leaflet plugin with Control Point Routing</title>
+		<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.css" />
+		<script src="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.js"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-map.js?key=KEY"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-routing.js?key=KEY"></script>
+		<script type="text/javascript">
+			"use strict";
+
+			var L, MQ, map, idx = 0, cps, rl;
+
+			function init() {
+				map = L.map('map', {
+					layers: MQ.mapLayer(),
+					center: [ 40.731701, -73.993411 ],
+					zoom: 15
+				});
+
+				L.control.scale().addTo(map);
+
+				cps = new L.featureGroup();
+				cps.addTo(map);
+
+				map.on('click', function(e) {
+					var c = L.circle(
+						[e.latlng.lat, e.latlng.lng],
+						400,
+						{
+							id: idx,
+							cweight: 100,
+							color: 'black',
+							fillColor: 'red',
+							opacity: 1,
+							fillOpacity: 0.5
+						}
+					).addTo(cps);
+					c.on('click', function(e) {
+						var r = e.target.getRadius(), w = e.target.options.fillOpacity;
+						var t = "<nobr>Radius:<select onchange='changepar(" +
+							cps.getLayerId(c) + ", \"r\", this[selectedIndex].value);'>" +
+							"<option";
+						if (r == 80.46600000000001) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.1</option>" +
+							"<option";
+						if (r == 400) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.5</option>" +
+						"<option";
+						if (r == 804.66) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">1</option>" +
+						"<option";
+						if (r == 4023.2999999999997) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">5</option>" +
+						"</select><br/>Weight:<select onchange='changepar(" + cps.getLayerId(c) + ", \"w\", this[selectedIndex].value);'>" +
+						"<option";
+						if (w == 0.125 && e.target.options.fillColor === 'green') {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.75</option>" +
+						"<option";
+						if (w == 0.25) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.5</option>" +
+						"<option";
+						if (w == 0.375) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.25</option>" +
+						"<option";
+						if (w == 0.45) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">0.1</option>" +
+						"<option";
+						if (w == 0.01) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">2</option>" +
+						"<option";
+						if (w == 0.025) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">5</option>" +
+						"<option";
+						if (w == 0.125 && e.target.options.fillColor === 'red') {
+							t = t + " selected='selected'";
+						}
+						t = t + ">25</option>" +
+						"<option";
+						if (w == 0.5) {
+							t = t + " selected='selected'";
+						}
+						t = t + ">100</option>" +
+						"</select><br/><input type='button' value='remove' onclick='removepoi(" + cps.getLayerId(c) + ")'/></nobr>"
+						e.target.bindPopup(t).openPopup();
+					});
+					idx = idx + 1;
+				});
+
+			}
+
+			function routeit() {
+				var cpc = [], dir = MQ.routing.directions();
+
+				cps.eachLayer(function (d){
+					var w = 0;
+					if (d.options.fillColor === 'red') {
+						w = d.options.fillOpacity * 200;
+					} else {
+						w = 1 - (d.options.fillOpacity * 2)
+					}
+					cpc.push({
+						lat: d.getLatLng().lat,
+						lng: d.getLatLng().lng,
+						weight: w,
+						radius: (d.getRadius() * 0.001242742)
+					});
+				});
+
+				dir.route({
+				  locations: [
+				    document.getElementById('orig').value,
+				    document.getElementById('dest').value
+				  ],
+				  options: {
+				  	routeControlPointCollection: cpc
+				  }
+				});
+
+				if (rl) {
+					map.removeLayer(rl);
+				}
+
+				rl = MQ.routing.routeLayer({
+				  directions: dir,
+				  fitBounds: true,
+				  ribbonOptions: {draggable: false}
+				});
+				map.addLayer(rl);
+			}
+
+			function changepar(a, b, c){
+				var d = cps.getLayer(a);
+				if (b === 'r') {
+					d.setRadius(c * 804.66);
+				} else {
+					d.options.cweight = c;
+					if (c < 1) {
+						d.setStyle({fillColor: 'green', opacity: (1 - c), fillOpacity: ((1 - c) / 2)});
+					} else {
+						d.setStyle({fillColor: 'red', opacity: (c / 100), fillOpacity: (c / 200)});
+					}
+				}
+			}
+
+			function removepoi(a) {
+				cps.removeLayer(cps.getLayer(a));
+			}
+		</script>
+		<style>
+			html, body {
+				font-family: arial, sans-serif;
+			}
+			#map {
+				width: 800px;
+				height: 600px;
+			}
+		</style>
+	</head>
+	<body onload="init();">
+		<div id="map"></div>
+		<div id="ipt">
+			Create a route by hitting the Route button.  Then create control points by clicking the map.  Adjust the control points by clicking the circle for the popup and set the radius, set the weight, or remove the control point.  Then click Route again.</br>
+			<input type="text" id="orig" value="Wheat Ridge, CO"/>
+			<input type="text" id="dest" value="Edgewater, CO"/>
+			<input type="button" value="Route" onclick="routeit();"/>
+		</div>
+	</body>
+</html>

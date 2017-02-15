@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MapQuest Leaflet plugin with Search Ahead, search api, route plugin</title>
+		<link rel="stylesheet" href="//code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+		<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.css" />
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+		<script src="//code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+		<script src="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.js"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-map.js?key=KEY"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-routing.js?key=KEY"></script>
+		<script type="text/javascript">
+			// configure search parameters
+			var config = {
+					table: 'mqap.ntpois',
+					searchmaxresults: 10,
+					searchradius: 5,
+					ambiguities: 'ignore'
+				},
+
+				// globals
+				highlight = 'linear-gradient(#ddd, #fff)',
+				base = 'linear-gradient(#eee, #fff)',
+				newmap = true,
+				saurl = '//www.mapquestapi.com/search/v3/prediction',
+				map, sr, srs, rhl ,MQ, L, $, Key, CustomRouteLayer, orig, Customicon;
+
+			function sicicon(a) {
+				'use strict';
+				if (a === '581208') {
+					return new Customicon({iconUrl: 'images/food.png'});
+				} else if (a === '701101') {
+					return new Customicon({iconUrl: 'images/hotels.png'});
+				} else if (a === '602101') {
+					return new Customicon({iconUrl: 'images/ATM.png'});
+				} else {
+					return new Customicon({iconUrl: 'images/poi.png'});
+				}
+			}
+
+			function over(id) {
+				'use strict';
+				var newicon = srs.getLayer(id).options.icon;
+				newicon.options.iconSize = [45,45];
+				newicon.options.iconAnchor = [21,45];
+				srs.getLayer(id).setIcon(newicon);
+				$('#row' + id).css('backgroundImage', highlight);
+
+			}
+
+			function out(id) {
+				'use strict';
+				var newicon = srs.getLayer(id).options.icon;
+				newicon.options.iconSize = [35, 36];
+				newicon.options.iconAnchor = [16, 35];
+				srs.getLayer(id).setIcon(newicon);
+				$('#row' + id).css('backgroundImage', base);
+			}
+
+			function startsearch(geometry) {
+				'use strict';
+				var extraCriteriaQueries = '', extraCriteriaValues = '', checkboxes = $('#sics').children('input');
+				if (geometry) {
+					orig = geometry; // new origin
+				} else {
+					geometry = orig; // search button clicked
+				}
+				srs.clearLayers();
+				rhl.clearLayers();
+				$('#t').html('');
+
+				$.each(checkboxes, function(idx) {
+					if (checkboxes.eq(idx).is(':checked')) { // why doesn't b[0].is(':checked') work, assuming function(idx, b)???
+						if (extraCriteriaQueries !== '') {
+							extraCriteriaQueries = extraCriteriaQueries + ' or ';
+							extraCriteriaValues = extraCriteriaValues + ',';
+						}
+						extraCriteriaQueries = extraCriteriaQueries + 'group_sic_code=?';
+						extraCriteriaValues = extraCriteriaValues + checkboxes.eq(idx).val();
+					}
+				});
+
+				// send search request
+				$.ajax('//www.mapquestapi.com/search/v2/radius' + // radius search http://www.mapquestapi.com/search/#radius
+					'?key=' + Key +
+					'&origin=' + geometry.coordinates[1] + ',' + geometry.coordinates[0] +
+					'&hostedData=' + config.table + '|' + extraCriteriaQueries + '|' + extraCriteriaValues +
+					'&maxMatches=' + config.searchmaxresults +
+					'&radius=' + config.searchradius +
+					'&ambiguities=' + config.ambiguities)
+				.done(function(data) {
+					var marker, layerid, mapLayer = MQ.mapLayer(),
+						tabletext = '<table id="searchresults"><tr><th>Name</th><th>Address</th><th>City</th><th>ST</th><th>Phone</th><th>GO</th></tr>';
+					if (data.searchResults && data.searchResults.length > 0){
+						sr = data;
+						marker = L.marker([data.origin.latLng.lat, data.origin.latLng.lng],
+							{
+								draggable: true,
+								title: "Your location",
+								icon: new Customicon({iconUrl: 'images/start.png'})
+							}
+						).bindPopup("Your location");
+						srs.addLayer(marker);
+						$.each(data.searchResults, function(b, c) {
+							marker = L.marker([c.shapePoints[0], c.shapePoints[1]],
+								{
+									draggable: true,
+									title: c.name,
+									icon: sicicon(c.fields.group_sic_code)
+								}
+							);
+							srs.addLayer(marker);
+							layerid = srs.getLayerId(marker); // undocumented but found here https://github.com/Leaflet/Leaflet/issues/1805
+							marker.on('mouseover', function(a){
+								over(srs.getLayerId(a.target));
+							})
+							.on('mouseout', function(a){
+								out(srs.getLayerId(a.target));
+							})
+							.bindPopup(c.name + ' <br/><input type="button" onclick="route(' + b + ')" value="GO"/>');
+							tabletext = tabletext + '<tr id="row' + layerid + '" ' +
+								'onmouseover="over(' + layerid + ');" ' +
+								'onmouseout="out(' + layerid + ');">' +
+								'<td>' + c.name + '</td>' +
+								'<td>' + c.fields.address + '</td>' +
+								'<td>' + c.fields.city + '</td>' +
+								'<td>' + c.fields.state + '</td>' +
+								'<td>' + c.fields.phone + '</td>' +
+								'<td><input type="button" onclick="route(' + b + ');" value="GO"/></td>' +
+								'</tr>';
+						});
+						tabletext = tabletext + '</table>';
+
+						// if a map does not exist, create one
+						if (newmap){
+							map = L.map('m'); // Leaflet map http://leafletjs.com/
+							L.control.layers({
+								'Map': mapLayer,
+								'Dark': MQ.darkLayer(),
+								'Light': MQ.lightLayer(),
+								'Satellite': MQ.satelliteLayer()
+							}).addTo(map);
+						}
+						map.fitBounds(srs.getBounds());
+						if (newmap) {
+							map.addLayer(mapLayer);
+						}
+						newmap = false;
+						srs.addTo(map);
+					} else {
+						tabletext = 'There were no search results near this origin.';
+					}
+					$('#t').html(tabletext);
+				})
+				.fail(function(ignore) {
+					$('#t').html('The search failed.');
+				});
+				return false;
+			}
+
+			function route(idx) {
+				'use strict';
+
+				// create route directions
+				var dir = MQ.routing.directions(); // MQ route plugin https://developer.mapquest.com/documentation/leaflet-plugins/routing
+
+				// add success function
+				dir.on('success', function(data) { // using success event to handle route narrative https://developer.mapquest.com/documentation/leaflet-plugins/routing#map-route-narrative
+						if (data.route.legs && data.route.legs.length > 0) {
+							var html = '<table id="routeresults"><tr><td>Narrative</td></tr>';
+
+							// loop through one leg of maneuvers
+							$.each(data.route.legs[0].maneuvers, function(b, c) {
+								html = html + '<tr><td><img src="' + c.iconUrl + '"/>&nbsp;&nbsp;';
+								if ((data.route.legs[0].maneuvers.length - 1) !== b){
+									html = html + c.narrative + ' and go ' + c.distance + ' miles';
+								} else {
+									html = html + sr.searchResults[idx].name +
+										c.narrative.substring(c.narrative.indexOf(' is on the '));
+								}
+								html = html + '&nbsp;&nbsp;<img src="' + c.iconUrl + '"/></td></tr>';
+							});
+							html = html + '</table>';
+							$('#t').html(html);
+						}
+				   	});
+				dir.route({
+					locations: [
+
+						// origin is the search origin from the search response
+						{latLng: {lat: sr.origin.latLng.lat, lng: sr.origin.latLng.lng}},
+
+						// destination is the search result from the search response
+						{latLng: {lat: sr.searchResults[idx].shapePoints[0], lng: sr.searchResults[idx].shapePoints[1]}}
+					] //, options: {} // options would go here
+				});
+				rhl.clearLayers();
+				rhl = new CustomRouteLayer({
+					directions: dir,
+					fitBounds: true
+				});
+				map.addLayer(rhl);
+			}
+
+			CustomRouteLayer = MQ.Routing.RouteLayer.extend({ // custom route layer to customize route markers https://developer.mapquest.com/documentation/leaflet-plugins/routing#map-route-custom
+				createStopMarker: function(location, stopNumber) {
+					'use strict';
+					var icon;
+					if (stopNumber === 1) {
+						icon = new Customicon({iconUrl: 'images/start.png'});
+					} else {
+						icon = new Customicon({iconUrl: 'images/finish.png'});
+					}
+					return L.marker(location.latLng, {icon: icon}).addTo(map);
+				}
+			});
+
+			$(function() {
+				'use strict';
+				srs = new L.FeatureGroup();
+				rhl = new L.FeatureGroup();
+				Customicon = L.Icon.extend({options: {iconSize: [35, 36], iconAnchor: [16, 35], popupAnchor: [-2, -30]}});
+				$('#tablename').html(config.table);
+
+				// autocomplete https://jqueryui.com/autocomplete/ thank goodness for jquery
+				$('#o').autocomplete({
+					minLength: 3, // minimum character limit for the input string to be completed
+					autoFocus: true,
+					source: function( request, response ) {
+						$.ajax({
+							url: saurl,
+							data: {
+								location: $('#currentlocation').val(), // center to encourage results toward your location (optional)
+								limit: 10, // limit results (optional)
+								collection: 'address,adminArea,airport', // currently "address", "adminArea", and "airport" are supported.
+								q: request.term, // input box value (required)
+								countryCode: 'US', // limits results to specific country(s)
+								key: Key // MapQuest key (required)
+							},
+							success: function(data) {
+								// p is used in the search ahead drop down results
+								// x is used to show the results of each search ahead request for debugging and can be removed
+								var p = [], x = '';
+								if (data.results) {
+									x = x + 'INPUT:' + data.request.q + '<br/>';
+									$.each(data.results, function(ignore, c) {
+										p.push({label: c.displayString, value: c});
+										x = x +
+											c.displayString + ',' +
+											c.recordType + ',' +
+											c.place.geometry.coordinates[0] + ',' +
+											c.place.geometry.coordinates[1] + ',' +
+											'<br/>';
+									});
+								}
+								$('#w').html(x + '<hr/>' + $('#w').html()).show();
+								response(p);
+							}
+						});
+					},
+					select: function(ignore, ui) {
+						try {
+							$('#o').val(ui.item.label);
+							startsearch(ui.item.value.place.geometry);
+							$('#w').html('').hide();
+						} catch(e) {
+							$('#t').html('Somethin wonky happened.<br/>' + e);
+						}
+						return false;
+					}
+				});
+			});
+		</script>
+		<style>
+			tr, input,
+			.custom .leaflet-popup-tip,
+			.custom .leaflet-popup-content-wrapper {
+				text-align: center;
+				color: #111;
+				background: linear-gradient(#eee, #fff);
+				border-radius: 6px;
+			}
+			td {
+				border-radius: 6px;
+			}
+			#i {
+				width: 50%;
+				height: 10%;
+			}
+			#w {
+				position: absolute;
+				right: 0px;
+				top: 0px;
+				width: 250px;
+				height: 250px;
+				overflow-y: auto;
+				text-align: right;
+				font-size: 8px;
+				display: none;
+			}
+			#m {
+				width: 800px;
+				height: 600px;
+				border-radius: 16px;
+			}
+			#t {
+				width: 800px;
+				height: 40%;
+			}
+			#searchresults, routeresults {
+				width: 800px;
+			}
+			body {
+				font-family: Arial, sans-serif;
+			}
+			#vs{
+				position: absolute;
+				bottom: 10px;
+				right: 10px;
+			}
+		</style>
+	</head>
+	<body>
+		<span id='i'>
+			Start searching <span id='tablename'></span> around your origin using search ahead functionality for the origin and extra criteria to filter search results. Then route from the origin to the search result.</br>
+			<span id='sics'>
+				Restaurants<input type='checkbox' value='581208' checked>
+				Hotels<input type='checkbox' value='701101'>
+				Banks<input type='checkbox' value='602101'><br/>
+			</span>
+			Sample current location: <select id='currentlocation' title='try "red" in different options'>
+				<option value='-104.984853,39.738453' selected='selected'>Denver, CO</option>
+				<option value='-74.007228,40.713054'>New York, NY</option>
+				<option value='-118.243344,34.052238'>Los Angeles, CA</option>
+				<option value='-122.33028,47.603229'>Seattle, WA</option>
+				<option value='-77.019912,38.892062'>Washington, DC</option>
+				<option value=''>none</option>
+			</select><br/>
+			Search origin: <input id='o' type='text' placeholder='Origin' value=''/>&nbsp;
+			<input type='button' value='Search' onclick='startsearch();'/>
+		</span>
+		<br/>
+		<div id='m'></div>
+		<div id='t'></div>
+		<!-- stuff below can be removed. it's just here to show how things are working. -->
+		<div id='w' title='search ahead results'></div>
+		<a href='javascript:window.open("view-source:" + window.location.href);' id='vs'>view source</a>
+	</body>
+</html>

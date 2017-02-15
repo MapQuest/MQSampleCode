@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MapQuest Leaflet plugin</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.css" />
+		<script src="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.js"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-map.js?key=KEY"></script>
+		<script type="text/javascript">
+			"use strict";
+
+			var L, MQ, map, markers;
+
+			function init() {
+
+				markers = L.featureGroup();
+
+				// create map with tile layer, center, and zoom
+				map = L.map('map', {
+					layers: [MQ.mapLayer(), markers],
+					center: [ 40.731701, -73.993411 ],
+					zoom: 12
+				});
+
+				// add simple layer control
+				L.control.layers(
+					{
+						'Map': MQ.mapLayer(),
+						'Sat': MQ.satelliteLayer()
+					},
+					{
+						'Markers': markers
+					}
+				).addTo(map);
+
+				// add simple marker with popup
+				L.marker(
+					[ 40.731701, -73.993411 ]
+				).addTo(markers);
+
+				// create custom icon
+				var sol = L.icon({
+				    iconUrl: 'images/sol.jpg',
+				    iconSize:     [32, 32],
+				    iconAnchor:   [11, 0], // torch points to location
+				    popupAnchor:  [0, 0]
+				});
+
+				// create marker using custom icon and open popup
+				L.marker(
+					[40.689727, -74.044969],
+					{icon: sol}
+				).bindPopup('Statue of Liberty').addTo(markers).openPopup();
+
+			};
+		</script>
+		<style>
+			#map {
+				width: 800px;
+				height: 600px;
+			}
+		</style>
+	</head>
+	<body onload='init();'>
+		<div id="map"></div>
+	</body>
+</html>

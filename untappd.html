@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>MapQuest Leaflet plugin</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.css" />
+		<script src="//cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/leaflet.js"></script>
+		<script src="//www.mapquestapi.com/sdk/leaflet/v2.s/mq-map.js?key=KEY"></script>
+		<script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+		<script type="text/javascript">
+			"use strict";
+
+			var L, MQ, $, map, markers;
+
+			function dosearch(){
+				$.ajax({
+					url: 'https://api.untappd.com/v4/thepub/local',
+					data: {
+						lat: map.getCenter().lat,
+						lng: map.getCenter().lng,
+						client_id: '636BA074B6E6E4A2451ABF2059B2CA094095440E',
+						client_secret: '630D6930533D9EBFBD3E59C655156F1651E8730F'
+					}
+				}).done(function(data) {
+					markers.clearLayers();
+					var items = data.response.checkins.items;
+					$.each(items, function(ignore, item) {
+						var txt = '', pics = '';
+						if (item.user.user_name && item.user.user_name !== '') {
+							txt = txt + item.user.user_name;
+						} else {
+							txt = txt + 'someone';
+						}
+						if (item.beer.beer_name && item.beer.beer_name !== '') {
+							txt = txt + ' checked in a ' + item.beer.beer_name;
+						} else {
+							txt = txt + ' checked in a beer';
+						}
+
+						if (item.brewery.brewery_name && item.brewery.brewery_name !== '') {
+							txt = txt + ' from ' + item.brewery.brewery_name;
+						}
+
+						if (item.venue.venue_name && item.venue.venue_name !== '') {
+							txt = txt + ' at ' + item.venue.venue_name;
+						}
+
+						if (item.rating_score && item.rating_score !== '') {
+							txt = txt + ' and gave it ' + item.rating_score + ' stars';
+						}
+
+						if (item.checkin_comment && item.checkin_comment !== '') {
+							txt = txt + ' saying, "' + item.checkin_comment + '"';
+						}
+
+						if (item.user.user_avatar && item.user.user_avatar !== '') {
+							pics = pics + ' <img height="50px" width="50px" src="' + item.user.user_avatar + '"/>';
+						}
+						if (item.beer.beer_label && item.beer.beer_label !== '') { // && beer_label !== "https://untappd.akamaized.net/site/assets/images/temp/badge-beer-default.png"
+							pics = pics + ' <img height="50px" width="50px" src="' + item.beer.beer_label + '"/>';
+						}
+
+						if (item.brewery.brewery_label && item.brewery.brewery_label !== '') {
+							pics = pics + ' <img height="50px" width="50px" src="' + item.brewery.brewery_label + '"/>';
+						}
+
+						txt = txt + '.<br/>' + pics;
+
+						L.marker([item.venue.location.lat, item.venue.location.lng])
+						.bindPopup(txt).addTo(markers);
+					});
+				});
+			}
+
+			function init() {
+				markers = L.featureGroup();
+				map = L.map('map', {
+					layers: MQ.mapLayer(),
+					center: [ 40.731701, -73.993411 ],
+					zoom: 12
+				});
+				markers.addTo(map);
+				map.on('dragend', dosearch);
+				dosearch();
+			}
+		</script>
+		<style>
+			#map {
+				width: 800px;
+				height: 600px;
+			}
+		</style>
+	</head>
+	<body onload="init();">
+		<div id="map"></div>
+	</body>
+</html>
